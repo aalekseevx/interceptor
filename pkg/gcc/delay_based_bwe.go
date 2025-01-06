@@ -7,8 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/interceptor/internal/cc"
 	"github.com/pion/logging"
+
+	"github.com/pion/interceptor/internal/cc"
+	"github.com/pion/transport/v3/xtime"
 )
 
 // DelayStats contains some internal statistics of the delay based congestion
@@ -23,9 +25,6 @@ type DelayStats struct {
 	State         state
 	TargetBitrate int
 }
-
-type now func() time.Time
-
 type delayController struct {
 	ackPipe     chan<- []cc.Acknowledgment
 	ackRatePipe chan<- []cc.Acknowledgment
@@ -41,7 +40,7 @@ type delayController struct {
 }
 
 type delayControllerConfig struct {
-	nowFn          now
+	timeManager    xtime.TimeManager
 	initialBitrate int
 	minBitrate     int
 	maxBitrate     int
@@ -61,14 +60,19 @@ func newDelayController(c delayControllerConfig) *delayController {
 		log:                     logging.NewDefaultLoggerFactory().NewLogger("gcc_delay_controller"),
 	}
 
-	rateController := newRateController(c.nowFn, c.initialBitrate, c.minBitrate, c.maxBitrate, func(ds DelayStats) {
+	rateController := newRateController(c.timeManager, c.initialBitrate, c.minBitrate, c.maxBitrate, func(ds DelayStats) {
 		delayController.log.Infof("delaystats: %v", ds)
 		if delayController.onUpdateCallback != nil {
 			delayController.onUpdateCallback(ds)
 		}
 	})
 	delayController.rateController = rateController
-	overuseDetector := newOveruseDetector(newAdaptiveThreshold(), 10*time.Millisecond, rateController.onDelayStats)
+	overuseDetector := newOveruseDetector(
+		newAdaptiveThreshold(setTimeManager(c.timeManager)),
+		c.timeManager,
+		10*time.Millisecond,
+		rateController.onDelayStats,
+	)
 	slopeEstimator := newSlopeEstimator(newKalman(), overuseDetector.onDelayStats)
 	arrivalGroupAccumulator := newArrivalGroupAccumulator()
 

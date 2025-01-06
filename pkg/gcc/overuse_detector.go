@@ -5,6 +5,8 @@ package gcc
 
 import (
 	"time"
+
+	"github.com/pion/transport/v3/xtime"
 )
 
 type threshold interface {
@@ -12,6 +14,7 @@ type threshold interface {
 }
 
 type overuseDetector struct {
+	timeManager xtime.TimeManager
 	threshold   threshold
 	overuseTime time.Duration
 
@@ -23,20 +26,21 @@ type overuseDetector struct {
 	increasingCounter  int
 }
 
-func newOveruseDetector(thresh threshold, overuseTime time.Duration, dsw func(DelayStats)) *overuseDetector {
+func newOveruseDetector(thresh threshold, timeManager xtime.TimeManager, overuseTime time.Duration, dsw func(DelayStats)) *overuseDetector {
 	return &overuseDetector{
+		timeManager:        timeManager,
 		threshold:          thresh,
 		overuseTime:        overuseTime,
 		dsWriter:           dsw,
 		lastEstimate:       0,
-		lastUpdate:         time.Now(),
+		lastUpdate:         timeManager.Now(),
 		increasingDuration: 0,
 		increasingCounter:  0,
 	}
 }
 
 func (d *overuseDetector) onDelayStats(ds DelayStats) {
-	now := time.Now()
+	now := d.timeManager.Now()
 	delta := now.Sub(d.lastUpdate)
 	d.lastUpdate = now
 

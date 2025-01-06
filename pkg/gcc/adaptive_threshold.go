@@ -6,6 +6,8 @@ package gcc
 import (
 	"math"
 	"time"
+
+	"github.com/pion/transport/v3/xtime"
 )
 
 const (
@@ -17,6 +19,12 @@ type adaptiveThresholdOption func(*adaptiveThreshold)
 func setInitialThreshold(t time.Duration) adaptiveThresholdOption {
 	return func(at *adaptiveThreshold) {
 		at.thresh = t
+	}
+}
+
+func setTimeManager(tm xtime.TimeManager) adaptiveThresholdOption {
+	return func(at *adaptiveThreshold) {
+		at.timeManager = tm
 	}
 }
 
@@ -33,6 +41,7 @@ func setInitialThreshold(t time.Duration) adaptiveThresholdOption {
 // Communication (WebRTC)](https://c3lab.poliba.it/images/6/65/Gcc-analysis.pdf)
 // for a more detailed description
 type adaptiveThreshold struct {
+	timeManager            xtime.TimeManager
 	thresh                 time.Duration
 	overuseCoefficientUp   float64
 	overuseCoefficientDown float64
@@ -46,6 +55,7 @@ type adaptiveThreshold struct {
 // values taken from draft-ietf-rmcat-gcc-02
 func newAdaptiveThreshold(opts ...adaptiveThresholdOption) *adaptiveThreshold {
 	at := &adaptiveThreshold{
+		timeManager:            xtime.StdTimeManager{},
 		thresh:                 time.Duration(12500 * float64(time.Microsecond)),
 		overuseCoefficientUp:   0.01,
 		overuseCoefficientDown: 0.00018,
@@ -78,7 +88,7 @@ func (a *adaptiveThreshold) compare(estimate, _ time.Duration) (usage, time.Dura
 }
 
 func (a *adaptiveThreshold) update(estimate time.Duration) {
-	now := time.Now()
+	now := a.timeManager.Now()
 	if a.lastUpdate.IsZero() {
 		a.lastUpdate = now
 	}

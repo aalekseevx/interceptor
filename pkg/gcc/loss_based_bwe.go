@@ -8,8 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/interceptor/internal/cc"
 	"github.com/pion/logging"
+
+	"github.com/pion/interceptor/internal/cc"
+	"github.com/pion/transport/v3/xtime"
 )
 
 const (
@@ -40,9 +42,10 @@ type lossBasedBandwidthEstimator struct {
 	lastIncrease   time.Time
 	lastDecrease   time.Time
 	log            logging.LeveledLogger
+	timeManager    xtime.TimeManager
 }
 
-func newLossBasedBWE(initialBitrate int) *lossBasedBandwidthEstimator {
+func newLossBasedBWE(initialBitrate int, tm xtime.TimeManager) *lossBasedBandwidthEstimator {
 	return &lossBasedBandwidthEstimator{
 		lock:           sync.Mutex{},
 		maxBitrate:     100_000_000, // 100 mbit
@@ -53,6 +56,7 @@ func newLossBasedBWE(initialBitrate int) *lossBasedBandwidthEstimator {
 		lastIncrease:   time.Time{},
 		lastDecrease:   time.Time{},
 		log:            logging.NewDefaultLoggerFactory().NewLogger("gcc_loss_controller"),
+		timeManager:    tm,
 	}
 }
 
@@ -87,19 +91,19 @@ func (e *lossBasedBandwidthEstimator) updateLossEstimate(results []cc.Acknowledg
 	defer e.lock.Unlock()
 
 	lossRatio := float64(packetsLost) / float64(len(results))
-	e.averageLoss = e.average(time.Since(e.lastLossUpdate), e.averageLoss, lossRatio)
-	e.lastLossUpdate = time.Now()
+	e.averageLoss = e.average(e.timeManager.Since(e.lastLossUpdate), e.averageLoss, lossRatio)
+	e.lastLossUpdate = e.timeManager.Now()
 
 	increaseLoss := math.Max(e.averageLoss, lossRatio)
 	decreaseLoss := math.Min(e.averageLoss, lossRatio)
 
-	if increaseLoss < increaseLossThreshold && time.Since(e.lastIncrease) > increaseTimeThreshold {
+	if increaseLoss < increaseLossThreshold && e.timeManager.Since(e.lastIncrease) > increaseTimeThreshold {
 		e.log.Infof("loss controller increasing; averageLoss: %v, decreaseLoss: %v, increaseLoss: %v", e.averageLoss, decreaseLoss, increaseLoss)
-		e.lastIncrease = time.Now()
+		e.lastIncrease = e.timeManager.Now()
 		e.bitrate = clampInt(int(increaseFactor*float64(e.bitrate)), e.minBitrate, e.maxBitrate)
-	} else if decreaseLoss > decreaseLossThreshold && time.Since(e.lastDecrease) > decreaseTimeThreshold {
+	} else if decreaseLoss > decreaseLossThreshold && e.timeManager.Since(e.lastDecrease) > decreaseTimeThreshold {
 		e.log.Infof("loss controller decreasing; averageLoss: %v, decreaseLoss: %v, increaseLoss: %v", e.averageLoss, decreaseLoss, increaseLoss)
-		e.lastDecrease = time.Now()
+		e.lastDecrease = e.timeManager.Now()
 		e.bitrate = clampInt(int(float64(e.bitrate)*(1-0.5*decreaseLoss)), e.minBitrate, e.maxBitrate)
 	}
 }

@@ -9,11 +9,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pion/rtcp"
+	"github.com/pion/rtp"
+
+	"github.com/pion/transport/v3/xtime"
+
 	"github.com/pion/interceptor"
 	"github.com/pion/interceptor/internal/cc"
 	"github.com/pion/interceptor/internal/ntp"
-	"github.com/pion/rtcp"
-	"github.com/pion/rtp"
 )
 
 const (
@@ -46,6 +49,7 @@ type SendSideBWE struct {
 	lossController  *lossBasedBandwidthEstimator
 	delayController *delayController
 	feedbackAdapter *cc.FeedbackAdapter
+	timeManager     xtime.TimeManager
 
 	onTargetBitrateChange func(bitrate int)
 
@@ -94,6 +98,13 @@ func SendSideBWEPacer(p Pacer) Option {
 	}
 }
 
+func SendSideTimeManager(tm xtime.TimeManager) Option {
+	return func(e *SendSideBWE) error {
+		e.timeManager = tm
+		return nil
+	}
+}
+
 // NewSendSideBWE creates a new sender side bandwidth estimator
 func NewSendSideBWE(opts ...Option) (*SendSideBWE, error) {
 	e := &SendSideBWE{
@@ -101,6 +112,7 @@ func NewSendSideBWE(opts ...Option) (*SendSideBWE, error) {
 		lossController:        nil,
 		delayController:       nil,
 		feedbackAdapter:       cc.NewFeedbackAdapter(),
+		timeManager:           xtime.StdTimeManager{},
 		onTargetBitrateChange: nil,
 		lock:                  sync.Mutex{},
 		latestStats:           Stats{},
@@ -115,11 +127,11 @@ func NewSendSideBWE(opts ...Option) (*SendSideBWE, error) {
 		}
 	}
 	if e.pacer == nil {
-		e.pacer = NewLeakyBucketPacer(e.latestBitrate)
+		e.pacer = NewLeakyBucketPacer(e.latestBitrate, LeakyBucketPacerWithTimeManager(e.timeManager))
 	}
-	e.lossController = newLossBasedBWE(e.latestBitrate)
+	e.lossController = newLossBasedBWE(e.latestBitrate, e.timeManager)
 	e.delayController = newDelayController(delayControllerConfig{
-		nowFn:          time.Now,
+		timeManager:    e.timeManager,
 		initialBitrate: e.latestBitrate,
 		minBitrate:     e.minBitrate,
 		maxBitrate:     e.maxBitrate,
@@ -147,7 +159,7 @@ func (e *SendSideBWE) AddStream(info *interceptor.StreamInfo, writer interceptor
 			}
 			attributes.Set(cc.TwccExtensionAttributesKey, hdrExtID)
 		}
-		if err := e.feedbackAdapter.OnSent(time.Now(), header, len(payload), attributes); err != nil {
+		if err := e.feedbackAdapter.OnSent(e.timeManager.Now(), header, len(payload), attributes); err != nil {
 			return 0, err
 		}
 		return writer.Write(header, payload, attributes)
@@ -157,7 +169,7 @@ func (e *SendSideBWE) AddStream(info *interceptor.StreamInfo, writer interceptor
 
 // WriteRTCP adds some RTCP feedback to the bandwidth estimator
 func (e *SendSideBWE) WriteRTCP(pkts []rtcp.Packet, _ interceptor.Attributes) error {
-	now := time.Now()
+	now := e.timeManager.Now()
 	e.closeLock.RLock()
 	defer e.closeLock.RUnlock()
 

@@ -7,6 +7,8 @@ import (
 	"math"
 	"sync"
 	"time"
+
+	"github.com/pion/transport/v3/xtime"
 )
 
 const (
@@ -15,7 +17,7 @@ const (
 )
 
 type rateController struct {
-	now                  now
+	timeManager          xtime.TimeManager
 	initialTargetBitrate int
 	minBitrate           int
 	maxBitrate           int
@@ -50,9 +52,9 @@ func (a *exponentialMovingAverage) update(value float64) {
 	}
 }
 
-func newRateController(now now, initialTargetBitrate, minBitrate, maxBitrate int, dsw func(DelayStats)) *rateController {
+func newRateController(tm xtime.TimeManager, initialTargetBitrate, minBitrate, maxBitrate int, dsw func(DelayStats)) *rateController {
 	return &rateController{
-		now:                  now,
+		timeManager:          tm,
 		initialTargetBitrate: initialTargetBitrate,
 		minBitrate:           minBitrate,
 		maxBitrate:           maxBitrate,
@@ -81,7 +83,7 @@ func (c *rateController) updateRTT(rtt time.Duration) {
 }
 
 func (c *rateController) onDelayStats(ds DelayStats) {
-	now := time.Now()
+	now := c.timeManager.Now()
 
 	if !c.init {
 		c.delayStats = ds
@@ -166,6 +168,6 @@ func (c *rateController) increase(now time.Time) int {
 func (c *rateController) decrease() int {
 	target := int(beta * float64(c.latestReceivedRate))
 	c.latestDecreaseRate.update(float64(c.latestReceivedRate))
-	c.lastUpdate = c.now()
+	c.lastUpdate = c.timeManager.Now()
 	return target
 }

@@ -9,9 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/interceptor"
 	"github.com/pion/logging"
 	"github.com/pion/rtp"
+
+	"github.com/pion/interceptor"
+	"github.com/pion/transport/v3/xtime"
 )
 
 var errLeakyBucketPacerPoolCastFailed = errors.New("failed to access leaky bucket pacer pool, cast failed")
@@ -25,7 +27,8 @@ type item struct {
 
 // LeakyBucketPacer implements a leaky bucket pacing algorithm
 type LeakyBucketPacer struct {
-	log logging.LeveledLogger
+	log         logging.LeveledLogger
+	timeManager xtime.TimeManager
 
 	f                 float64
 	targetBitrate     int
@@ -43,10 +46,19 @@ type LeakyBucketPacer struct {
 	pool *sync.Pool
 }
 
+type LeakyBucketPacerOption func(*LeakyBucketPacer)
+
+func LeakyBucketPacerWithTimeManager(tm xtime.TimeManager) LeakyBucketPacerOption {
+	return func(p *LeakyBucketPacer) {
+		p.timeManager = tm
+	}
+}
+
 // NewLeakyBucketPacer initializes a new LeakyBucketPacer
-func NewLeakyBucketPacer(initialBitrate int) *LeakyBucketPacer {
+func NewLeakyBucketPacer(initialBitrate int, options ...LeakyBucketPacerOption) *LeakyBucketPacer {
 	p := &LeakyBucketPacer{
 		log:            logging.NewDefaultLoggerFactory().NewLogger("pacer"),
+		timeManager:    xtime.StdTimeManager{},
 		f:              1.5,
 		targetBitrate:  initialBitrate,
 		pacingInterval: 5 * time.Millisecond,
@@ -61,6 +73,9 @@ func NewLeakyBucketPacer(initialBitrate int) *LeakyBucketPacer {
 			b := make([]byte, 1460)
 			return &b
 		},
+	}
+	for _, o := range options {
+		o(p)
 	}
 
 	go p.Run()
@@ -114,16 +129,16 @@ func (p *LeakyBucketPacer) Write(header *rtp.Header, payload []byte, attributes 
 
 // Run starts the LeakyBucketPacer
 func (p *LeakyBucketPacer) Run() {
-	ticker := time.NewTicker(p.pacingInterval)
+	ticker := p.timeManager.NewTicker(p.pacingInterval)
 	defer ticker.Stop()
 
-	lastSent := time.Now()
+	lastSent := p.timeManager.Now()
 	for {
 		select {
 		case <-p.done:
 			return
-		case now := <-ticker.C:
-			budget := int(float64(now.Sub(lastSent).Milliseconds()) * float64(p.getTargetBitrate()) / 8000.0)
+		case now := <-ticker.C():
+			budget := int(float64(now.Time().Sub(lastSent).Milliseconds()) * float64(p.getTargetBitrate()) / 8000.0)
 			p.qLock.Lock()
 			for p.queue.Len() != 0 && budget > 0 {
 				p.log.Infof("budget=%v, len(queue)=%v, targetBitrate=%v", budget, p.queue.Len(), p.getTargetBitrate())
@@ -148,13 +163,14 @@ func (p *LeakyBucketPacer) Run() {
 				if err != nil {
 					p.log.Errorf("failed to write packet: %v", err)
 				}
-				lastSent = now
+				lastSent = now.Time()
 				budget -= n
 
 				p.pool.Put(next.payload)
 				p.qLock.Lock()
 			}
 			p.qLock.Unlock()
+			now.Done()
 		}
 	}
 }
