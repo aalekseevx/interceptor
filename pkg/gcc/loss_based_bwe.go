@@ -42,10 +42,10 @@ type lossBasedBandwidthEstimator struct {
 	lastIncrease   time.Time
 	lastDecrease   time.Time
 	log            logging.LeveledLogger
-	timeManager    xtime.TimeManager
+	timeManager    xtime.Manager
 }
 
-func newLossBasedBWE(initialBitrate int, tm xtime.TimeManager) *lossBasedBandwidthEstimator {
+func newLossBasedBWE(initialBitrate int, tm xtime.Manager) *lossBasedBandwidthEstimator {
 	return &lossBasedBandwidthEstimator{
 		lock:           sync.Mutex{},
 		maxBitrate:     100_000_000, // 100 mbit

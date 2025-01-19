@@ -13,6 +13,7 @@ import (
 	"github.com/pion/rtp"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/transport/v3/stdtime"
 	"github.com/pion/transport/v3/xtime"
 )
 
@@ -28,7 +29,7 @@ type item struct {
 // LeakyBucketPacer implements a leaky bucket pacing algorithm
 type LeakyBucketPacer struct {
 	log         logging.LeveledLogger
-	timeManager xtime.TimeManager
+	timeManager xtime.Manager
 
 	f                 float64
 	targetBitrate     int
@@ -48,7 +49,7 @@ type LeakyBucketPacer struct {
 
 type LeakyBucketPacerOption func(*LeakyBucketPacer)
 
-func LeakyBucketPacerWithTimeManager(tm xtime.TimeManager) LeakyBucketPacerOption {
+func LeakyBucketPacerWithTimeManager(tm xtime.Manager) LeakyBucketPacerOption {
 	return func(p *LeakyBucketPacer) {
 		p.timeManager = tm
 	}
@@ -58,7 +59,7 @@ func LeakyBucketPacerWithTimeManager(tm xtime.TimeManager) LeakyBucketPacerOptio
 func NewLeakyBucketPacer(initialBitrate int, options ...LeakyBucketPacerOption) *LeakyBucketPacer {
 	p := &LeakyBucketPacer{
 		log:            logging.NewDefaultLoggerFactory().NewLogger("pacer"),
-		timeManager:    xtime.StdTimeManager{},
+		timeManager:    stdtime.Manager{},
 		f:              1.5,
 		targetBitrate:  initialBitrate,
 		pacingInterval: 5 * time.Millisecond,

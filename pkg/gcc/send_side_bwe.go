@@ -12,6 +12,7 @@ import (
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 
+	"github.com/pion/transport/v3/stdtime"
 	"github.com/pion/transport/v3/xtime"
 
 	"github.com/pion/interceptor"
@@ -49,7 +50,7 @@ type SendSideBWE struct {
 	lossController  *lossBasedBandwidthEstimator
 	delayController *delayController
 	feedbackAdapter *cc.FeedbackAdapter
-	timeManager     xtime.TimeManager
+	timeManager     xtime.Manager
 
 	onTargetBitrateChange func(bitrate int)
 
@@ -98,7 +99,7 @@ func SendSideBWEPacer(p Pacer) Option {
 	}
 }
 
-func SendSideTimeManager(tm xtime.TimeManager) Option {
+func SendSideTimeManager(tm xtime.Manager) Option {
 	return func(e *SendSideBWE) error {
 		e.timeManager = tm
 		return nil
@@ -112,7 +113,7 @@ func NewSendSideBWE(opts ...Option) (*SendSideBWE, error) {
 		lossController:        nil,
 		delayController:       nil,
 		feedbackAdapter:       cc.NewFeedbackAdapter(),
-		timeManager:           xtime.StdTimeManager{},
+		timeManager:           stdtime.Manager{},
 		onTargetBitrateChange: nil,
 		lock:                  sync.Mutex{},
 		latestStats:           Stats{},

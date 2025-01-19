@@ -17,7 +17,7 @@ const (
 )
 
 type rateController struct {
-	timeManager          xtime.TimeManager
+	timeManager          xtime.Manager
 	initialTargetBitrate int
 	minBitrate           int
 	maxBitrate           int
@@ -52,7 +52,7 @@ func (a *exponentialMovingAverage) update(value float64) {
 	}
 }
 
-func newRateController(tm xtime.TimeManager, initialTargetBitrate, minBitrate, maxBitrate int, dsw func(DelayStats)) *rateController {
+func newRateController(tm xtime.Manager, initialTargetBitrate, minBitrate, maxBitrate int, dsw func(DelayStats)) *rateController {
 	return &rateController{
 		timeManager:          tm,
 		initialTargetBitrate: initialTargetBitrate,

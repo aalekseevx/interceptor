@@ -40,7 +40,7 @@ type delayController struct {
 }
 
 type delayControllerConfig struct {
-	timeManager    xtime.TimeManager
+	timeManager    xtime.Manager
 	initialBitrate int
 	minBitrate     int
 	maxBitrate     int

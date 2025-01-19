@@ -14,7 +14,7 @@ type threshold interface {
 }
 
 type overuseDetector struct {
-	timeManager xtime.TimeManager
+	timeManager xtime.Manager
 	threshold   threshold
 	overuseTime time.Duration
 
@@ -26,7 +26,7 @@ type overuseDetector struct {
 	increasingCounter  int
 }
 
-func newOveruseDetector(thresh threshold, timeManager xtime.TimeManager, overuseTime time.Duration, dsw func(DelayStats)) *overuseDetector {
+func newOveruseDetector(thresh threshold, timeManager xtime.Manager, overuseTime time.Duration, dsw func(DelayStats)) *overuseDetector {
 	return &overuseDetector{
 		timeManager:        timeManager,
 		threshold:          thresh,

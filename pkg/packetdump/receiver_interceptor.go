@@ -4,6 +4,8 @@
 package packetdump
 
 import (
+	"fmt"
+
 	"github.com/pion/interceptor"
 )
 
@@ -53,6 +55,7 @@ func (r *ReceiverInterceptor) BindRemoteStream(_ *interceptor.StreamInfo, reader
 		}
 		header, err := attr.GetRTPHeader(bytes)
 		if err != nil {
+			fmt.Println("log rtp err2", err)
 			return 0, nil, err
 		}
 
